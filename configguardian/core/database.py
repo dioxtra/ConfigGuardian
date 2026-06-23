@@ -130,25 +130,18 @@ class Database:
         """Insert an event and return its database id."""
         self.initialize()
         with self.connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO events (
-                    file_path,
-                    event_type,
-                    timestamp,
-                    severity,
-                    details
-                )
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    file_path,
-                    event_type,
-                    self._format_timestamp(timestamp),
-                    severity.upper(),
-                    details,
-                ),
-            )
+            formatted_timestamp = self._format_timestamp(timestamp)
+            columns = self._column_names(conn, "events")
+            values: dict[str, Any] = {
+                "file_path": file_path,
+                "event_type": event_type,
+                "timestamp": formatted_timestamp,
+                "severity": severity.upper(),
+                "details": details,
+                "reason": details,
+                "created_at": formatted_timestamp,
+            }
+            cursor = self._insert_dynamic(conn, "events", columns, values)
             return int(cursor.lastrowid)
 
     def insert_snapshot(
@@ -163,25 +156,20 @@ class Database:
         self.initialize()
         safe_size = max(0, int(size))
         with self.connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO snapshots (
-                    file_path,
-                    hash,
-                    content,
-                    size,
-                    timestamp
-                )
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    file_path,
-                    file_hash,
-                    content,
-                    safe_size,
-                    self._format_timestamp(timestamp),
-                ),
-            )
+            formatted_timestamp = self._format_timestamp(timestamp)
+            columns = self._column_names(conn, "snapshots")
+            values: dict[str, Any] = {
+                "file_path": file_path,
+                "hash": file_hash,
+                "sha256": file_hash,
+                "content": content,
+                "size": safe_size,
+                "size_bytes": safe_size,
+                "timestamp": formatted_timestamp,
+                "modified_at": formatted_timestamp,
+                "created_at": formatted_timestamp,
+            }
+            cursor = self._insert_dynamic(conn, "snapshots", columns, values)
             return int(cursor.lastrowid)
 
     def insert_alert(
@@ -194,23 +182,18 @@ class Database:
         """Insert an alert and return its database id."""
         self.initialize()
         with self.connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO alerts (
-                    file_path,
-                    severity,
-                    reason,
-                    timestamp
-                )
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    file_path,
-                    severity.upper(),
-                    reason,
-                    self._format_timestamp(timestamp),
-                ),
-            )
+            formatted_timestamp = self._format_timestamp(timestamp)
+            columns = self._column_names(conn, "alerts")
+            values: dict[str, Any] = {
+                "file_path": file_path,
+                "severity": severity.upper(),
+                "reason": reason,
+                "message": reason,
+                "provider": "internal",
+                "timestamp": formatted_timestamp,
+                "sent_at": formatted_timestamp,
+            }
+            cursor = self._insert_dynamic(conn, "alerts", columns, values)
             return int(cursor.lastrowid)
 
     def insert_timeline(
@@ -221,16 +204,16 @@ class Database:
         """Insert a timeline message and return its database id."""
         self.initialize()
         with self.connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO timeline (
-                    message,
-                    timestamp
-                )
-                VALUES (?, ?)
-                """,
-                (message, self._format_timestamp(timestamp)),
-            )
+            formatted_timestamp = self._format_timestamp(timestamp)
+            columns = self._column_names(conn, "timeline")
+            values: dict[str, Any] = {
+                "message": message,
+                "timestamp": formatted_timestamp,
+                "file_path": message,
+                "event_type": "timeline",
+                "created_at": formatted_timestamp,
+            }
+            cursor = self._insert_dynamic(conn, "timeline", columns, values)
             return int(cursor.lastrowid)
 
     def get_events(
@@ -477,6 +460,24 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_timeline_timestamp
                 ON timeline(timestamp);
             """
+        )
+
+    @staticmethod
+    def _insert_dynamic(
+        conn: Connection,
+        table: str,
+        existing_columns: set[str],
+        values: dict[str, Any],
+    ) -> sqlite3.Cursor:
+        """Insert values only for columns that exist in the current table."""
+        insert_columns = [
+            column for column in values if column in existing_columns
+        ]
+        placeholders = ", ".join("?" for _ in insert_columns)
+        column_sql = ", ".join(insert_columns)
+        return conn.execute(
+            f"INSERT INTO {table} ({column_sql}) VALUES ({placeholders})",
+            [values[column] for column in insert_columns],
         )
 
     @staticmethod

@@ -45,3 +45,52 @@ def test_database_round_trips_events_and_snapshots(tmp_path: Path) -> None:
     assert snapshot is not None
     assert snapshot["id"] == snapshot_id
     assert snapshot["content"] == "value=2\n"
+
+
+def test_database_writes_to_legacy_schema(tmp_path: Path) -> None:
+    """Database remains usable when old skeleton columns still exist."""
+    database = Database(tmp_path / "legacy.db")
+    with database.connection() as connection:
+        connection.executescript(
+            """
+            CREATE TABLE events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL,
+                sha256 TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                modified_at TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+    database = Database(tmp_path / "legacy.db")
+
+    event_id = database.insert_event(
+        "/tmp/app.conf",
+        "modified",
+        "INFO",
+        "File /tmp/app.conf modified",
+        "2026-06-23T21:10:00+00:00",
+    )
+    snapshot_id = database.insert_snapshot(
+        "/tmp/app.conf",
+        "abc123",
+        "value=2\n",
+        8,
+        "2026-06-23T21:11:00+00:00",
+    )
+
+    assert event_id == 1
+    assert snapshot_id == 1
+    assert database.get_events("/tmp/app.conf")[0]["details"] == "File /tmp/app.conf modified"
+    assert database.get_snapshot(snapshot_id)["hash"] == "abc123"
