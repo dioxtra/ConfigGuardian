@@ -1,0 +1,184 @@
+Metadata-Version: 2.4
+Name: configguardian
+Version: 0.1.0
+Summary: Linux configuration monitoring, snapshotting, and risk analysis CLI.
+Author: ConfigGuardian Maintainers
+License: MIT
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: typer>=0.12.0
+Requires-Dist: rich>=13.7.0
+Requires-Dist: watchdog>=4.0.0
+Requires-Dist: pydantic>=2.7.0
+Requires-Dist: pyyaml>=6.0.0
+Requires-Dist: deepdiff>=7.0.0
+Requires-Dist: schedule>=1.2.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0.0; extra == "dev"
+
+# ConfigGuardian
+
+ConfigGuardian is a Python CLI for monitoring Linux configuration files,
+capturing versioned snapshots, comparing changes, and producing lightweight
+security insights.
+
+The project is currently a GitHub-ready MVP: the core snapshot, diff, timeline,
+rollback, analyzer, alert-manager, and report flows are implemented with a
+small, testable architecture. Some provider integrations and advanced policy
+rules are intentionally kept simple and are listed in the roadmap.
+
+## Features
+
+- Watch Linux configuration files with `watchdog`
+- Store file events and snapshots in SQLite
+- Create SHA256-based snapshots with file content, size, and timestamp
+- Compare stored snapshots with line-level diffs
+- Restore file content from a selected snapshot with automatic backup
+- Analyze events with plugin-style security analyzers
+- Filter and dispatch alerts through modular notifiers
+- Generate an HTML report with recent events and snapshot statistics
+
+## Default Watched Files
+
+- `/etc/ssh/sshd_config`
+- `/etc/passwd`
+- `/etc/sudoers`
+- `/etc/crontab`
+- `/etc/nginx/nginx.conf`
+
+Extra paths can be supplied with a YAML config:
+
+```yaml
+watched_files:
+  - /etc/ssh/sshd_config
+  - /etc/passwd
+  - /opt/myapp/app.conf
+```
+
+## Installation
+
+Python 3.12+ is required.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+```
+
+On Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+```
+
+## Usage
+
+Initialize storage:
+
+```bash
+configguardian init
+```
+
+Create snapshots:
+
+```bash
+configguardian snapshot
+configguardian snapshot --config examples/config.yaml
+```
+
+Compare latest snapshots:
+
+```bash
+configguardian diff
+```
+
+Compare explicit snapshots:
+
+```bash
+configguardian diff --old 1 --new 2
+```
+
+Show timeline:
+
+```bash
+configguardian timeline
+```
+
+Restore a snapshot:
+
+```bash
+configguardian rollback 2
+```
+
+Generate an HTML report:
+
+```bash
+configguardian report
+```
+
+Start live monitoring on Linux:
+
+```bash
+sudo configguardian monitor
+```
+
+## Security Analysis Rules
+
+The MVP includes built-in rules for:
+
+- SSH: root login and password authentication
+- sudoers: broad `NOPASSWD:ALL`
+- passwd: newly added users and root-like users
+- cron: new entries and suspicious commands such as `wget`, `curl`, `bash -i`
+- nginx: unsafe root serving and disabled security headers
+
+Analyzer results use this schema:
+
+```python
+{
+    "file_path": "...",
+    "severity": "LOW|MEDIUM|HIGH|CRITICAL",
+    "reason": "...",
+    "recommendation": "...",
+}
+```
+
+## Testing
+
+Run the full test suite:
+
+```bash
+python -m pytest
+```
+
+Run a syntax/import sanity check:
+
+```bash
+python -m compileall -q configguardian tests
+```
+
+## Development Notes
+
+- SQLite is used directly; no ORM is required.
+- Services receive dependencies through constructors.
+- Runtime database files are ignored by Git.
+- Tests use temporary files instead of modifying real `/etc` files.
+- Notification providers should be configured with real credentials only in a
+  private environment.
+
+## Roadmap
+
+- More complete Linux policy analyzers
+- Richer HTML report charts
+- Async notifier queue with retry policies
+- Systemd unit examples
+- GitHub Actions CI workflow
+- Packaged release artifacts
+
+## License
+
+MIT
+

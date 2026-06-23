@@ -1,0 +1,9 @@
+watched_files:
+  - /etc/ssh/sshd_config
+  - /etc/passwd
+  - /etc/sudoers
+  - /etc/crontab
+  - /etc/nginx/nginx.conf
+database_path: configguardian/data/database.db
+enabled_notifiers: []
+
