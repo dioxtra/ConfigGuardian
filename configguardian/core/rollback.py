@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import shutil
-from typing import Any
 
 from configguardian.core.database import Database
 from configguardian.utils.constants import BACKUP_SUFFIX
@@ -52,4 +51,3 @@ class RollbackService:
         """Return a timestamped backup path for a rollback target."""
         timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
         return target_path.with_name(f"{target_path.name}.{timestamp}{BACKUP_SUFFIX}")
-
