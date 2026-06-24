@@ -1,6 +1,9 @@
 """Alert manager tests."""
 
+import json
+
 from configguardian.alerts.base import BaseNotifier
+from configguardian.alerts.discord import DiscordNotifier
 from configguardian.alerts.manager import AlertManager
 
 
@@ -54,3 +57,42 @@ def test_alert_manager_sends_medium_and_deduplicates() -> None:
     manager.shutdown()
 
     assert len(notifier.alerts) == 1
+
+
+def test_discord_notifier_mentions_everyone(monkeypatch) -> None:
+    """Discord payload includes an explicit everyone mention."""
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b""
+
+    def fake_urlopen(request, timeout: float):
+        captured["timeout"] = timeout
+        captured["headers"] = dict(request.header_items())
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr("configguardian.alerts.discord.urlopen", fake_urlopen)
+
+    notifier = DiscordNotifier("https://discord.com/api/webhooks/test")
+    notifier.send(
+        {
+            "file_path": "/tmp/app.conf",
+            "severity": "HIGH",
+            "reason": "Test",
+            "recommendation": "Review",
+            "timestamp": "2026-06-23T21:10:00+00:00",
+        }
+    )
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert str(payload["content"]).startswith("@everyone\n")
+    assert payload["allowed_mentions"] == {"parse": ["everyone"]}

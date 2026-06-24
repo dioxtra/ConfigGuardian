@@ -21,7 +21,10 @@ class DiscordNotifier(BaseNotifier):
 
     def send(self, alert: dict[str, str]) -> None:
         """Send a Discord alert."""
-        payload = {"content": self.format_message(alert)}
+        payload = {
+            "content": f"@everyone\n{self.format_message(alert)}",
+            "allowed_mentions": {"parse": ["everyone"]},
+        }
         request = Request(
             self.webhook_url,
             data=json.dumps(payload).encode("utf-8"),
