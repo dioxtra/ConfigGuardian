@@ -163,6 +163,10 @@ The report command generates a local HTML report containing:
 - latest snapshots
 - file-level statistics
 
+Example generated report:
+
+![ConfigGuardian HTML report](docs/assets/configguardian-report.png)
+
 ```bash
 configguardian report
 ```
