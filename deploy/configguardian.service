@@ -10,6 +10,7 @@ Type=simple
 # User=root
 # Uncomment the line above for simple setups that need to read /etc files
 # without additional permission configuration.
+Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/usr/local/bin/configguardian monitor --config /etc/configguardian/config.yaml
 Restart=on-failure
 RestartSec=5
