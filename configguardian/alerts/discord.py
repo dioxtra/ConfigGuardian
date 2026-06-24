@@ -21,25 +21,16 @@ class DiscordNotifier(BaseNotifier):
 
     def send(self, alert: dict[str, str]) -> None:
         """Send a Discord alert."""
-        payload = {"content": self._format_message(alert)}
+        payload = {"content": self.format_message(alert)}
         request = Request(
             self.webhook_url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "ConfigGuardian/0.1",
+            },
             method="POST",
         )
 
         with urlopen(request, timeout=self.timeout_seconds) as response:
             response.read()
-
-    @staticmethod
-    def _format_message(alert: dict[str, str]) -> str:
-        """Format an alert for Discord."""
-        return (
-            f"⚠ {alert.get('severity', 'LOW')} Severity\n\n"
-            f"File: {alert.get('file_path', '')}\n\n"
-            f"Reason: {alert.get('reason', '')}\n\n"
-            f"Recommendation: {alert.get('recommendation', '')}\n\n"
-            f"Time: {alert.get('timestamp', '')}"
-        )
-
