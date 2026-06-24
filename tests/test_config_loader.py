@@ -70,3 +70,19 @@ def test_load_alert_manager_skips_missing_required_field() -> None:
     )
 
     assert manager.notifiers == []
+
+
+def test_load_alert_manager_supports_low_severity_alerts() -> None:
+    """send_low can be enabled from YAML configuration."""
+    manager = load_alert_manager_from_config(
+        {
+            "alerts": {
+                "min_severity": "LOW",
+                "send_low": True,
+                "providers": {},
+            }
+        }
+    )
+
+    assert manager.min_severity == "LOW"
+    assert manager.send_low is True

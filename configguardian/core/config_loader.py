@@ -23,6 +23,8 @@ def load_alert_manager_from_config(config: dict[str, Any]) -> AlertManager:
     manager_config = {
         "min_severity": alerts_config.get("min_severity", "MEDIUM"),
         "cooldown_seconds": alerts_config.get("cooldown_seconds", 30),
+        "send_low": alerts_config.get("send_low", False),
+        "send_all_results": alerts_config.get("send_all_results", False),
     }
     manager = AlertManager(config=manager_config)
 
