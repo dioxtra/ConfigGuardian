@@ -1,27 +1,36 @@
 """Analyzer smoke tests."""
 
-from pathlib import Path
-
-from configguardian.analyzers.cron import CronAnalyzer
-from configguardian.analyzers.ssh import SshAnalyzer
-from configguardian.core.analyzer import create_default_engine
+from configguardian.core.analyzer import CronAnalyzer, SshAnalyzer, create_default_engine
 
 
 def test_ssh_analyzer_flags_root_login() -> None:
     """SSH analyzer identifies enabled root login."""
     analyzer = SshAnalyzer()
-    findings = analyzer.analyze(Path("/etc/ssh/sshd_config"), "PermitRootLogin yes")
+    finding = analyzer.analyze(
+        {
+            "file_path": "/etc/ssh/sshd_config",
+            "content": "PermitRootLogin yes",
+        }
+    )
 
-    assert findings[0].severity == "HIGH"
-    assert "PermitRootLogin" in findings[0].reason
+    assert finding is not None
+    assert finding["severity"] == "HIGH"
+    assert "PermitRootLogin" in finding["reason"]
 
 
 def test_cron_analyzer_marks_cron_changes_medium() -> None:
     """Cron analyzer returns medium severity for cron content."""
     analyzer = CronAnalyzer()
-    findings = analyzer.analyze(Path("/etc/crontab"), "* * * * * root id")
+    finding = analyzer.analyze(
+        {
+            "file_path": "/etc/crontab",
+            "content": "* * * * * root id",
+            "previous_content": "",
+        }
+    )
 
-    assert findings[0].severity == "MEDIUM"
+    assert finding is not None
+    assert finding["severity"] == "MEDIUM"
 
 
 def test_core_analyzer_engine_returns_standard_schema() -> None:

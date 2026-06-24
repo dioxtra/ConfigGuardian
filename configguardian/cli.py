@@ -12,6 +12,7 @@ from rich.table import Table
 from configguardian.alerts.manager import AlertManager
 from configguardian.core.analyzer import create_default_engine
 from configguardian.core.database import Database
+from configguardian.core.config_loader import load_alert_manager_from_config
 from configguardian.core.diff_engine import DiffEngine
 from configguardian.core.monitor import Monitor
 from configguardian.core.rollback import RollbackService
@@ -53,6 +54,25 @@ def _load_watched_files(config_path: Optional[Path]) -> list[Path | str]:
     return list(DEFAULT_WATCHED_FILES)
 
 
+def _load_yaml_config(config_path: Optional[Path]) -> dict[str, Any]:
+    """Load a YAML configuration file into a dictionary."""
+    if config_path is None:
+        return {}
+
+    try:
+        import yaml
+
+        loaded = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except (OSError, ImportError) as exc:
+        logger.exception("Failed to load config file %s: %s", config_path, exc)
+        return {}
+
+    if isinstance(loaded, dict):
+        return loaded
+
+    return {}
+
+
 @app.command("init")
 def init() -> None:
     """Initialize local ConfigGuardian storage."""
@@ -71,11 +91,16 @@ def init() -> None:
 def monitor(config_path: Optional[Path] = typer.Option(None, "--config", "-c")) -> None:
     """Start file monitoring."""
     database = _database()
+    alert_manager = (
+        load_alert_manager_from_config(_load_yaml_config(config_path))
+        if config_path is not None
+        else AlertManager()
+    )
     service = Monitor(
         database=database,
         config_path=config_path,
         analyzer_engine=create_default_engine(),
-        alert_manager=AlertManager(),
+        alert_manager=alert_manager,
     )
     service.start()
     console.print("[green]ConfigGuardian monitor started. Press Ctrl+C to stop.[/green]")
@@ -192,4 +217,3 @@ def status() -> None:
     table.add_row("Default watched files", str(len(DEFAULT_WATCHED_FILES)))
     table.add_row("Monitoring", "stopped")
     console.print(table)
-

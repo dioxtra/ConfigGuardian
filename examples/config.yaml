@@ -5,5 +5,26 @@ watched_files:
   - /etc/crontab
   - /etc/nginx/nginx.conf
 database_path: configguardian/data/database.db
-enabled_notifiers: []
-
+alerts:
+  min_severity: MEDIUM
+  cooldown_seconds: 30
+  providers:
+    discord:
+      enabled: false
+      webhook_url: https://discord.com/api/webhooks/your-webhook-id/your-webhook-token
+    telegram:
+      enabled: false
+      bot_token: your-telegram-bot-token
+      chat_id: your-telegram-chat-id
+    slack:
+      enabled: false
+      webhook_url: https://hooks.slack.com/services/your/webhook/url
+    email:
+      enabled: false
+      smtp_host: smtp.example.com
+      smtp_port: 587
+      sender: cg@example.com
+      recipient: oncall@example.com
+      username: cg@example.com
+      password: replace-with-secret
+      use_tls: true
