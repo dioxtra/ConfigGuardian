@@ -1,0 +1,21 @@
+[Unit]
+Description=ConfigGuardian - Linux Config File Monitor
+After=network.target
+
+[Service]
+Type=simple
+# User=configguardian
+# Uncomment the line above to run as a dedicated non-root service user.
+# Create the user first and grant the required file permissions; see deploy/README.md.
+# User=root
+# Uncomment the line above for simple setups that need to read /etc files
+# without additional permission configuration.
+ExecStart=/usr/local/bin/configguardian monitor --config /etc/configguardian/config.yaml
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=configguardian
+
+[Install]
+WantedBy=multi-user.target

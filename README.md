@@ -1,43 +1,48 @@
 # ConfigGuardian
 
-**ConfigGuardian** is a lightweight Python CLI for monitoring critical Linux
-configuration files, storing versioned snapshots, comparing changes, and
-highlighting risky configuration edits.
+ConfigGuardian is a lightweight Python CLI for monitoring critical Linux
+configuration files, storing versioned snapshots, comparing changes, analyzing
+risk, and generating local security reports.
 
-It helps answer three practical questions:
+It is built for system administrators, security engineers, DevSecOps teams, and
+homelab users who want a simple, local, auditable way to answer:
 
 - What changed?
 - When did it change?
+- Which file changed?
 - Is the change risky?
+- Can I restore a previous version?
 
-ConfigGuardian stores its data locally in SQLite, uses `watchdog` for real-time
-file monitoring, and keeps the architecture modular so new analyzers and alert
-providers can be added cleanly.
+ConfigGuardian uses SQLite for local storage, `watchdog` for real-time file
+monitoring, `typer` for the CLI, and a modular analyzer and notifier design so
+the project can grow without turning into a monolith.
 
----
+## Project Status
 
-## What It Does
+ConfigGuardian is currently a working GitHub MVP. It is not an enterprise SIEM
+or a full compliance platform, but the core workflows are implemented and
+testable:
 
-ConfigGuardian can:
+- file monitoring
+- snapshot creation
+- snapshot diffing
+- timeline listing
+- rollback with backup
+- security analysis
+- alert dispatch architecture
+- HTML report generation
+- GitHub Actions CI
 
-- monitor important Linux configuration files
-- create SHA256-based snapshots
-- store file content, size, hash, and timestamp
-- compare old and new snapshots
-- show a timeline of file events
-- restore a file from a selected snapshot
-- detect risky configuration patterns
-- send alerts through modular notifier providers
-- generate an HTML report
+The project is intended to be a clean foundation for future hardening,
+packaging, and production deployment work.
 
-It is designed for Linux administrators, security engineers, homelab users, and
-DevSecOps teams who want a simple local configuration integrity tool.
+## Features
 
----
+### File Monitoring
 
-## Default Watched Files
+ConfigGuardian can monitor important Linux configuration files in real time.
 
-By default, ConfigGuardian watches:
+Default watched files:
 
 ```text
 /etc/ssh/sshd_config
@@ -47,29 +52,19 @@ By default, ConfigGuardian watches:
 /etc/nginx/nginx.conf
 ```
 
-You can provide your own watched files with a YAML config:
+The monitor handles:
 
-```yaml
-watched_files:
-  - /etc/ssh/sshd_config
-  - /etc/passwd
-  - /opt/myapp/app.conf
-```
-
----
-
-## Features
-
-### Real-Time Monitoring
-
-- Watches files with `watchdog`
-- Handles created, modified, and deleted events
-- Supports custom YAML config files
-- Uses lightweight debounce protection for noisy filesystem events
+- created events
+- modified events
+- deleted events
+- duplicate event debounce
+- optional YAML-based watched file configuration
 
 ### Snapshots
 
-Each snapshot stores:
+Snapshots store the state of watched files in SQLite.
+
+Each snapshot includes:
 
 - file path
 - SHA256 hash
@@ -77,18 +72,22 @@ Each snapshot stores:
 - file size
 - UTC timestamp
 
-### Diff
+### Diff Engine
 
-ConfigGuardian can compare:
+The diff engine compares snapshots and shows:
 
-- two explicit snapshot IDs
-- the latest two snapshots for each file
+- added lines
+- removed lines
+- changed content summary
 
-The diff output highlights added and removed lines.
+You can compare explicit snapshot IDs or let ConfigGuardian compare the latest
+available snapshots.
 
 ### Timeline
 
-Events are stored in SQLite and can be listed from the CLI:
+All file events are persisted and can be listed from the CLI.
+
+Example:
 
 ```bash
 configguardian timeline
@@ -96,8 +95,8 @@ configguardian timeline
 
 ### Rollback
 
-ConfigGuardian can restore a file from a snapshot ID. Before restoring, it
-creates a timestamped backup of the current file.
+ConfigGuardian can restore a file from a selected snapshot ID. Before restoring
+the snapshot content, it creates a timestamped backup of the current file.
 
 Example backup name:
 
@@ -107,82 +106,116 @@ sshd_config.20260623143001.configguardian.bak
 
 ### Security Analysis
 
-Built-in rules detect common risky changes:
+ConfigGuardian includes a plugin-style analyzer engine in
+`configguardian/core/analyzer.py`.
+
+Built-in analyzer coverage:
 
 | File | Rule | Severity |
 | --- | --- | --- |
 | `/etc/ssh/sshd_config` | `PermitRootLogin yes` | HIGH |
 | `/etc/ssh/sshd_config` | `PasswordAuthentication yes` | MEDIUM |
 | `/etc/sudoers` | `NOPASSWD:ALL` | HIGH |
-| `/etc/passwd` | new regular user detected | MEDIUM |
+| `/etc/passwd` | new user detected | MEDIUM |
 | `/etc/passwd` | root-like user detected | HIGH |
 | `/etc/crontab` | new cron entry | MEDIUM |
 | `/etc/crontab` | suspicious commands such as `wget`, `curl`, `bash -i` | HIGH |
 | `/etc/nginx/nginx.conf` | disabled security headers | MEDIUM |
-| `/etc/nginx/nginx.conf` | root serving enabled | HIGH |
+| `/etc/nginx/nginx.conf` | root directory serving enabled | HIGH |
+
+Analyzer results use a standard schema:
+
+```python
+{
+    "file_path": "...",
+    "severity": "LOW|MEDIUM|HIGH|CRITICAL",
+    "reason": "...",
+    "recommendation": "...",
+}
+```
 
 ### Alerts
 
-ConfigGuardian includes notifier classes for:
+ConfigGuardian has a provider-based notification system.
 
-- Discord webhooks
-- Telegram bots
-- Slack webhooks
+Supported providers:
+
+- Discord webhook
+- Telegram bot
+- Slack webhook
 - SMTP email
 
-The alert manager filters low-severity noise by default, suppresses duplicate
-alerts, and prevents repeated alert spam with cooldown logic.
+Alert manager behavior:
 
-### Reports
+- filters alerts below the configured severity threshold
+- ignores duplicate alerts
+- groups repeated alerts during cooldown
+- sends notifications in background workers
+- logs notifier failures without crashing the monitor
 
-The HTML report includes:
+### HTML Reports
 
-- event count
-- snapshot count
+The report command generates a local HTML report containing:
+
+- event summary
 - severity distribution
 - recent events
 - latest snapshots
-- file-level snapshot statistics
+- file-level statistics
 
----
+```bash
+configguardian report
+```
 
-## Requirements
+Default report path:
 
-- Python 3.12+
-- Linux for real `/etc` monitoring
-- Windows or macOS can be used for development and local sandbox tests
-
----
+```text
+configguardian/data/reports/report.html
+```
 
 ## Installation
 
-Clone the repository:
+### Requirements
+
+- Python 3.12 or newer
+- Linux for real `/etc` monitoring
+- Windows, macOS, or Linux for development and sandbox testing
+
+### Clone
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/dioxtra/ConfigGuardian.git
 cd ConfigGuardian
 ```
 
-Create and activate a virtual environment:
+### Create a Virtual Environment
+
+Linux or macOS:
 
 ```bash
-python3.12 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-Install ConfigGuardian:
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### Install
 
 ```bash
+python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-Check the CLI:
+Verify the CLI:
 
 ```bash
 configguardian --help
 ```
-
----
 
 ## Quick Start
 
@@ -198,13 +231,13 @@ Create snapshots:
 configguardian snapshot
 ```
 
-Show status:
+Show current status:
 
 ```bash
 configguardian status
 ```
 
-Show event timeline:
+Show recorded events:
 
 ```bash
 configguardian timeline
@@ -216,17 +249,25 @@ Generate an HTML report:
 configguardian report
 ```
 
-The report is written to:
+## Deployment
 
-```text
-configguardian/data/reports/report.html
+ConfigGuardian can be deployed as a systemd service so the monitor keeps running
+in the background and starts automatically after reboot.
+
+```bash
+sudo pip install -e .
+sudo mkdir -p /etc/configguardian
+sudo cp examples/config.yaml /etc/configguardian/config.yaml
+sudo bash deploy/install.sh
 ```
 
----
+See [deploy/README.md](deploy/README.md) for full systemd deployment
+documentation.
 
-## Safe Local Demo
+## Safe Demo
 
-Use this demo first. It does not modify real system files.
+Use this demo before monitoring real system files. It only touches files under
+`/tmp`.
 
 ```bash
 mkdir -p /tmp/configguardian-demo
@@ -235,6 +276,8 @@ echo "PermitRootLogin no" > /tmp/configguardian-demo/sshd_config
 cat > /tmp/configguardian-demo/config.yaml <<EOF
 watched_files:
   - /tmp/configguardian-demo/sshd_config
+alerts:
+  providers: {}
 EOF
 
 configguardian init
@@ -244,17 +287,42 @@ echo "PermitRootLogin yes" > /tmp/configguardian-demo/sshd_config
 configguardian snapshot --config /tmp/configguardian-demo/config.yaml
 
 configguardian diff
+configguardian timeline
 configguardian report
 ```
 
----
+## Real Linux Usage
 
-## Windows Sandbox Demo
+Monitoring files under `/etc` usually requires elevated permissions.
 
-Windows does not have Linux `/etc` paths. Use a local file for testing:
+Create an initial baseline:
+
+```bash
+sudo configguardian snapshot
+```
+
+Start real-time monitoring:
+
+```bash
+sudo configguardian monitor
+```
+
+Stop monitoring with `Ctrl+C`.
+
+Review activity:
+
+```bash
+configguardian timeline
+configguardian diff
+configguardian report
+```
+
+## Windows Development Demo
+
+Windows does not have Linux `/etc` paths, so use a local sandbox file.
 
 ```powershell
-mkdir sandbox
+New-Item -ItemType Directory -Force sandbox | Out-Null
 Set-Content sandbox\app.conf "enabled=true"
 
 @"
@@ -267,70 +335,76 @@ configguardian snapshot --config examples\local.yaml
 
 Set-Content sandbox\app.conf "enabled=false"
 configguardian snapshot --config examples\local.yaml
-
 configguardian diff
-configguardian report
 ```
 
----
+## Configuration
 
-## Real Linux Monitoring
+ConfigGuardian can read YAML configuration files through `--config`.
 
-For real system files, ConfigGuardian may need elevated permissions.
+Example:
 
-Create an initial snapshot:
+```yaml
+watched_files:
+  - /etc/ssh/sshd_config
+  - /etc/passwd
+  - /etc/sudoers
+  - /etc/crontab
+  - /etc/nginx/nginx.conf
+
+alerts:
+  min_severity: MEDIUM
+  cooldown_seconds: 30
+  providers:
+    discord:
+      enabled: false
+      webhook_url: https://discord.com/api/webhooks/your-webhook-id/your-webhook-token
+    telegram:
+      enabled: false
+      bot_token: your-telegram-bot-token
+      chat_id: your-telegram-chat-id
+    slack:
+      enabled: false
+      webhook_url: https://hooks.slack.com/services/your/webhook/url
+    email:
+      enabled: false
+      smtp_host: smtp.example.com
+      smtp_port: 587
+      sender: cg@example.com
+      recipient: oncall@example.com
+      username: cg@example.com
+      password: replace-with-secret
+      use_tls: true
+```
+
+Use the config file:
 
 ```bash
-sudo .venv/bin/configguardian snapshot
+configguardian monitor --config examples/config.yaml
+configguardian snapshot --config examples/config.yaml
+configguardian config --config examples/config.yaml
 ```
 
-Start monitoring:
+Never commit real webhook URLs, bot tokens, SMTP passwords, or production
+secrets.
 
-```bash
-sudo .venv/bin/configguardian monitor
-```
-
-Stop monitoring with `Ctrl+C`.
-
-View events:
-
-```bash
-configguardian timeline
-```
-
-Generate a report:
-
-```bash
-configguardian report
-```
-
----
-
-## Command Reference
+## CLI Reference
 
 ### `configguardian init`
 
-Initializes the local SQLite database.
+Initializes local SQLite storage.
 
 ```bash
 configguardian init
 ```
 
-### `configguardian status`
+### `configguardian monitor`
 
-Shows basic project status.
-
-```bash
-configguardian status
-```
-
-### `configguardian config`
-
-Shows effective configuration.
+Starts real-time file monitoring.
 
 ```bash
-configguardian config
-configguardian config --config examples/config.yaml
+configguardian monitor
+configguardian monitor --config examples/config.yaml
 ```
 
 ### `configguardian snapshot`
@@ -351,25 +425,25 @@ configguardian diff
 configguardian diff --old 1 --new 2
 ```
 
-### `configguardian timeline`
-
-Shows recent file events.
-
-```bash
-configguardian timeline
-configguardian timeline --limit 50
-```
-
 ### `configguardian rollback`
 
-Restores a file from a snapshot.
+Restores a file from a snapshot ID and creates a backup first.
 
 ```bash
 configguardian rollback 2
 ```
 
-Always test rollback on temporary files before using it on important system
+Test rollback on temporary files before using it on important system
 configuration files.
+
+### `configguardian timeline`
+
+Lists recorded file events.
+
+```bash
+configguardian timeline
+configguardian timeline --limit 50
+```
 
 ### `configguardian report`
 
@@ -379,74 +453,84 @@ Generates an HTML report.
 configguardian report
 ```
 
-### `configguardian monitor`
+### `configguardian config`
 
-Starts real-time monitoring.
+Shows the effective watched file configuration.
 
 ```bash
-configguardian monitor
-configguardian monitor --config examples/config.yaml
+configguardian config
+configguardian config --config examples/config.yaml
 ```
 
----
+### `configguardian status`
+
+Shows basic local status.
+
+```bash
+configguardian status
+```
 
 ## Architecture
 
 ```text
 configguardian/
-  cli.py                 Typer command-line interface
-  main.py                Python entrypoint
+  cli.py                Typer CLI
+  main.py               Python entrypoint
 
   core/
-    database.py          SQLite persistence layer
-    monitor.py           watchdog event pipeline
-    snapshot.py          snapshot creation
-    diff_engine.py       snapshot comparison
-    rollback.py          restore with backup
-    timeline.py          event timeline
-    analyzer.py          plugin-based security analysis
-    hashing.py           SHA256 helpers
-    scheduler.py         scheduled task shell
+    monitor.py          watchdog event pipeline
+    database.py         SQLite persistence layer
+    snapshot.py         snapshot creation
+    diff_engine.py      snapshot comparison
+    rollback.py         file restore with backup
+    timeline.py         event queries
+    analyzer.py         plugin-based risk analysis
+    scheduler.py        background scheduler service
+    config_loader.py    YAML alert manager loader
 
   alerts/
-    base.py              notifier interface
-    manager.py           filtering, cooldown, dispatch
-    discord.py           Discord notifier
-    telegram.py          Telegram notifier
-    slack.py             Slack notifier
-    email.py             SMTP email notifier
+    base.py             notifier contract
+    manager.py          filtering, cooldown, deduplication, dispatch
+    discord.py          Discord webhook notifier
+    telegram.py         Telegram Bot API notifier
+    slack.py            Slack webhook notifier
+    email.py            SMTP email notifier
 
   reports/
-    html_report.py       HTML report
-    markdown_report.py   Markdown report
-    json_report.py       JSON report
+    html_report.py      HTML report generation
+    markdown_report.py  Markdown report generation
+    json_report.py      JSON report generation
 
   models/
     snapshot_model.py
     event_model.py
     config_model.py
     alert_model.py
-```
 
----
+  utils/
+    logger.py
+    constants.py
+    helpers.py
+    file_utils.py
+```
 
 ## Data Flow
 
 ```text
-1. watchdog detects a file event
-2. Monitor normalizes the event
-3. Database stores the event
-4. AnalyzerEngine checks for risky patterns
-5. AlertManager filters and deduplicates alerts
-6. Notifiers send alerts when configured
-7. Snapshot, diff, timeline, and report commands inspect stored data
+watchdog
+  -> Monitor
+  -> Database
+  -> AnalyzerEngine
+  -> AlertManager
+  -> Notifiers
 ```
 
----
+Snapshot, diff, timeline, rollback, and report commands all read from the same
+local SQLite storage.
 
 ## Storage
 
-ConfigGuardian uses SQLite directly. No ORM is required.
+ConfigGuardian uses SQLite directly and does not use an ORM.
 
 Main tables:
 
@@ -455,13 +539,14 @@ Main tables:
 - `alerts`
 - `timeline`
 
-Runtime database files are stored under:
+Runtime files are created under:
 
 ```text
 configguardian/data/
 ```
 
----
+Runtime database files, caches, logs, and generated reports should not be
+committed to Git.
 
 ## Testing
 
@@ -471,43 +556,53 @@ Run the test suite:
 python -m pytest
 ```
 
-Run a syntax/import check:
+Run syntax/import validation:
 
 ```bash
 python -m compileall -q configguardian tests
 ```
 
-Expected current test result:
+Run linting:
 
-```text
-14 passed
+```bash
+python -m ruff check configguardian tests
 ```
 
----
+Run type checking:
+
+```bash
+python -m mypy configguardian --ignore-missing-imports
+```
+
+## Continuous Integration
+
+The GitHub Actions workflow runs on pushes and pull requests to `main`.
+
+CI jobs:
+
+- `lint` with Ruff on Python 3.12
+- `test` on Python 3.12 and 3.13
+- `typecheck` with mypy on Python 3.12
+- coverage XML upload through Codecov
 
 ## Security Notes
 
-- Use the safe local demo before touching real system files.
-- Run against `/etc` only when you understand the permission and rollback impact.
-- Keep notification tokens, webhooks, and SMTP credentials out of Git.
-- ConfigGuardian is a local configuration monitoring tool, not a replacement for
-  a SIEM, EDR, or full compliance scanner.
-
----
+- Start with the safe demo before touching real system files.
+- Use elevated permissions only when needed.
+- Be careful with rollback on production configuration files.
+- Keep webhook URLs, bot tokens, SMTP passwords, and other secrets out of Git.
+- ConfigGuardian is a local configuration integrity and visibility tool. It is
+  not a replacement for a SIEM, EDR, backup platform, or compliance scanner.
 
 ## Roadmap
 
-- GitHub Actions CI
-- Systemd service example
-- More Linux hardening rules
-- Richer HTML report charts
-- Packaged releases
+- richer HTML report charts and filtering
+- more Linux hardening rules
+- systemd service example
+- packaged releases
 - SIEM-friendly export formats
-
----
+- release automation
 
 ## License
 
 MIT
-
-:3
