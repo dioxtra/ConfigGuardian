@@ -1,5 +1,6 @@
 """Real-time file monitoring engine for ConfigGuardian."""
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
@@ -262,8 +263,11 @@ class Monitor:
             self.logger.exception("Analyzer or alert dispatch failed: %s", exc)
 
     @staticmethod
-    def _normalize_path(path: Path | str) -> str:
+    def _normalize_path(path: Path | str | bytes) -> str:
         """Normalize a path for exact event matching."""
+        if isinstance(path, bytes):
+            path = os.fsdecode(path)
+
         return str(Path(path).expanduser().resolve(strict=False))
 
 

@@ -142,7 +142,7 @@ class Database:
                 "created_at": formatted_timestamp,
             }
             cursor = self._insert_dynamic(conn, "events", columns, values)
-            return int(cursor.lastrowid)
+            return self._lastrowid(cursor)
 
     def insert_snapshot(
         self,
@@ -170,7 +170,7 @@ class Database:
                 "created_at": formatted_timestamp,
             }
             cursor = self._insert_dynamic(conn, "snapshots", columns, values)
-            return int(cursor.lastrowid)
+            return self._lastrowid(cursor)
 
     def insert_alert(
         self,
@@ -194,7 +194,7 @@ class Database:
                 "sent_at": formatted_timestamp,
             }
             cursor = self._insert_dynamic(conn, "alerts", columns, values)
-            return int(cursor.lastrowid)
+            return self._lastrowid(cursor)
 
     def insert_timeline(
         self,
@@ -214,7 +214,7 @@ class Database:
                 "created_at": formatted_timestamp,
             }
             cursor = self._insert_dynamic(conn, "timeline", columns, values)
-            return int(cursor.lastrowid)
+            return self._lastrowid(cursor)
 
     def get_events(
         self,
@@ -518,3 +518,12 @@ class Database:
     def _row_to_dict(row: Row) -> dict[str, Any]:
         """Convert a sqlite3 row to a plain dictionary."""
         return dict(row)
+
+    @staticmethod
+    def _lastrowid(cursor: sqlite3.Cursor) -> int:
+        """Return a guaranteed integer row id from an insert cursor."""
+        lastrowid = cursor.lastrowid
+        if lastrowid is None:
+            raise DatabaseError("SQLite insert did not return a row id")
+
+        return int(lastrowid)

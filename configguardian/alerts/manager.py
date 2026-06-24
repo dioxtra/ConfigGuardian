@@ -4,7 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from threading import RLock
 from time import monotonic
-from typing import Optional
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional
 
 from configguardian.alerts.base import BaseNotifier
 from configguardian.utils.logger import get_logger
@@ -22,15 +23,15 @@ class AlertManager:
 
     def __init__(
         self,
-        config: Optional[dict[str, object]] = None,
+        config: Optional[Mapping[str, Any]] = None,
         notifiers: Optional[list[BaseNotifier]] = None,
     ) -> None:
-        self.config = config or {}
-        self.min_severity = str(self.config.get("min_severity", "MEDIUM")).upper()
-        self.cooldown_seconds = int(self.config.get("cooldown_seconds", 30))
-        self.send_low = bool(self.config.get("send_low", False))
-        self.send_all_results = bool(self.config.get("send_all_results", False))
-        self.max_workers = int(self.config.get("max_workers", 4))
+        self.config = dict(config or {})
+        self.min_severity = str(self._config_value("min_severity", "MEDIUM")).upper()
+        self.cooldown_seconds = self._config_int("cooldown_seconds", 30)
+        self.send_low = self._config_bool("send_low", False)
+        self.send_all_results = self._config_bool("send_all_results", False)
+        self.max_workers = self._config_int("max_workers", 4)
         self.notifiers: list[BaseNotifier] = notifiers or []
         self.logger = get_logger(__name__)
         self._last_sent_by_file: dict[str, float] = {}
@@ -47,7 +48,7 @@ class AlertManager:
         with self._lock:
             self.notifiers.append(notifier)
 
-    def emit(self, alert: dict[str, str]) -> None:
+    def emit(self, alert: Mapping[str, Any]) -> None:
         """Dispatch one normalized alert to enabled notifiers."""
         normalized = self._normalize_alert(alert)
 
@@ -74,23 +75,23 @@ class AlertManager:
         for notifier in notifiers:
             self._executor.submit(self._send_safely, notifier, normalized.copy())
 
-    def emit_results(self, results: list[dict[str, str]]) -> None:
+    def emit_results(self, results: Sequence[Mapping[str, Any]]) -> None:
         """Dispatch analyzer results according to manager configuration."""
         selected_results = results if self.send_all_results else self._worst_only(results)
 
         for result in selected_results:
             self.emit(result)
 
-    def should_send(self, alert: dict[str, str]) -> bool:
+    def should_send(self, alert: Mapping[str, Any]) -> bool:
         """Return whether an alert should be sent now."""
-        severity = alert.get("severity", "LOW").upper()
+        severity = str(alert.get("severity", "LOW")).upper()
         if severity == "LOW" and not self.send_low:
             return False
 
         if self._severity_score(severity) < self._severity_score(self.min_severity):
             return False
 
-        file_path = alert.get("file_path", "")
+        file_path = str(alert.get("file_path", ""))
         fingerprint = self._fingerprint(alert)
 
         if self._last_fingerprint_by_file.get(file_path) == fingerprint:
@@ -106,10 +107,10 @@ class AlertManager:
         """Stop background alert workers after queued sends finish."""
         self._executor.shutdown(wait=True)
 
-    def _send_safely(self, notifier: BaseNotifier, alert: dict[str, str]) -> None:
+    def _send_safely(self, notifier: BaseNotifier, alert: Mapping[str, Any]) -> None:
         """Send through a notifier and log failures."""
         try:
-            notifier.send(alert)
+            notifier.send(dict(alert))
         except Exception as exc:
             self.logger.exception(
                 "Failed to send alert via %s: %s",
@@ -117,34 +118,37 @@ class AlertManager:
                 exc,
             )
 
-    def _group_alert(self, alert: dict[str, str]) -> None:
+    def _group_alert(self, alert: Mapping[str, Any]) -> None:
         """Track alerts suppressed during cooldown."""
-        severity = alert.get("severity", "LOW").upper()
+        severity = str(alert.get("severity", "LOW")).upper()
         if severity == "LOW" and not self.send_low:
             return
 
         if self._severity_score(severity) < self._severity_score(self.min_severity):
             return
 
-        file_path = alert.get("file_path", "")
+        file_path = str(alert.get("file_path", ""))
         self._grouped_counts_by_file[file_path] = (
             self._grouped_counts_by_file.get(file_path, 0) + 1
         )
 
-    def _normalize_alert(self, alert: dict[str, str]) -> dict[str, str]:
+    def _normalize_alert(self, alert: Mapping[str, Any]) -> dict[str, str]:
         """Return an alert with all required fields."""
         return {
-            "file_path": alert.get("file_path", ""),
-            "severity": alert.get("severity", "LOW").upper(),
-            "reason": alert.get("reason", "Security event detected"),
-            "recommendation": alert.get(
+            "file_path": str(alert.get("file_path", "")),
+            "severity": str(alert.get("severity", "LOW")).upper(),
+            "reason": str(alert.get("reason", "Security event detected")),
+            "recommendation": str(alert.get(
                 "recommendation",
                 "Review and validate this configuration change.",
-            ),
-            "timestamp": alert.get("timestamp", self._utc_timestamp()),
+            )),
+            "timestamp": str(alert.get("timestamp", self._utc_timestamp())),
         }
 
-    def _worst_only(self, results: list[dict[str, str]]) -> list[dict[str, str]]:
+    def _worst_only(
+        self,
+        results: Sequence[Mapping[str, Any]],
+    ) -> list[Mapping[str, Any]]:
         """Return a one-item list containing the highest-severity result."""
         if not results:
             return []
@@ -152,7 +156,9 @@ class AlertManager:
         return [
             max(
                 results,
-                key=lambda result: self._severity_score(result.get("severity", "LOW")),
+                key=lambda result: self._severity_score(
+                    str(result.get("severity", "LOW"))
+                ),
             )
         ]
 
@@ -161,14 +167,14 @@ class AlertManager:
         return self.SEVERITY_ORDER.get(severity.upper(), 0)
 
     @staticmethod
-    def _fingerprint(alert: dict[str, str]) -> str:
+    def _fingerprint(alert: Mapping[str, Any]) -> str:
         """Return a stable duplicate key for an alert."""
         return "|".join(
             (
-                alert.get("file_path", ""),
-                alert.get("severity", ""),
-                alert.get("reason", ""),
-                alert.get("recommendation", ""),
+                str(alert.get("file_path", "")),
+                str(alert.get("severity", "")),
+                str(alert.get("reason", "")),
+                str(alert.get("recommendation", "")),
             )
         )
 
@@ -176,3 +182,25 @@ class AlertManager:
     def _utc_timestamp() -> str:
         """Return the current UTC timestamp in ISO format."""
         return datetime.now(tz=timezone.utc).isoformat()
+
+    def _config_value(self, key: str, default: Any) -> Any:
+        """Return a raw config value with a default fallback."""
+        value = self.config.get(key, default)
+        return default if value is None else value
+
+    def _config_int(self, key: str, default: int) -> int:
+        """Return a config integer with a safe fallback."""
+        value = self._config_value(key, default)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _config_bool(self, key: str, default: bool) -> bool:
+        """Return a config boolean with permissive parsing."""
+        value = self._config_value(key, default)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
