@@ -594,15 +594,6 @@ CI jobs:
 - ConfigGuardian is a local configuration integrity and visibility tool. It is
   not a replacement for a SIEM, EDR, backup platform, or compliance scanner.
 
-## Roadmap
-
-- richer HTML report charts and filtering
-- more Linux hardening rules
-- systemd service example
-- packaged releases
-- SIEM-friendly export formats
-- release automation
-
 ## License
 
 MIT
